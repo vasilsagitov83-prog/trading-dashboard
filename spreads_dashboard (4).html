@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Спреды MOEX/FXPRO</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;background:#f5f5f0;color:#1a1a1a;padding:1rem;}
+  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px;}
+  h1{font-size:16px;font-weight:500;}
+  .status-row{display:flex;flex-direction:column;gap:2px;}
+  .status{font-size:12px;color:#888;}
+  .status.ok{color:#1D9E75;}
+  .status.err{color:#E24B4A;}
+  .status.warn{color:#BA7517;}
+  .time{font-size:11px;color:#aaa;}
+  .card{background:#fff;border:0.5px solid #ddd;border-radius:12px;padding:0.875rem 1rem;margin-bottom:0.75rem;}
+  .card-title{font-size:11px;color:#888;font-weight:500;letter-spacing:.07em;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+  .src-badge{font-size:10px;padding:1px 6px;border-radius:4px;font-weight:400;}
+  .src-auto{background:#E1F5EE;color:#0F6E56;}
+  .src-manual{background:#FAEEDA;color:#633806;}
+  table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;}
+  th{text-align:left;color:#888;font-weight:500;padding:3px 4px 5px;border-bottom:0.5px solid #eee;font-size:11px;}
+  th:not(:first-child){text-align:right;}
+  td{padding:5px 4px;border-bottom:0.5px solid #eee;}
+  td:not(:first-child){text-align:right;}
+  tr:last-child td{border-bottom:none;}
+  .pos{color:#1D9E75;font-weight:500;}
+  .neg{color:#E24B4A;font-weight:500;}
+  .neu{color:#888;}
+  .loading{color:#888;font-size:12px;}
+  .btn{font-size:12px;padding:5px 12px;border-radius:8px;border:0.5px solid #ccc;cursor:pointer;background:#fff;color:#1a1a1a;}
+  .btn:hover{background:#f5f5f0;}
+  .copy-btn{font-size:12px;padding:4px 10px;border-radius:8px;border:0.5px solid #ccc;cursor:pointer;background:#fff;color:#888;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:600px){.grid2{grid-template-columns:1fr;}}
+  .fx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:0;}
+  .fx-card{background:#f5f5f0;border-radius:8px;padding:0.5rem 0.75rem;}
+  .fx-label{font-size:11px;color:#888;margin-bottom:2px;}
+  .fx-val{font-size:15px;font-weight:500;margin-bottom:2px;}
+  .fx-src{font-size:10px;color:#aaa;}
+  .fx-input{width:100%;font-size:12px;padding:2px 4px;border:0.5px solid #ccc;border-radius:4px;margin-top:2px;}
+  .btn-row{display:flex;gap:8px;}
+  .moex-input{width:80px;font-size:12px;padding:2px 4px;border:0.5px solid #ccc;border-radius:4px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Спреды MOEX / FXPRO</h1>
+    <div class="status-row">
+      <span id="status-moex" class="status">MOEX: загрузка...</span>
+      <span id="status-fx" class="status">FXPRO: загрузка...</span>
+      <span id="time" class="time"></span>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn" onclick="loadAll()">Обновить MOEX</button>
+    <button class="btn" onclick="pasteFromClipboard()" style="background:#1D9E75;color:#fff;border-color:#1D9E75;">📋 Вставить FXPRO</button>
+    <div id="drop-zone" style="border:1.5px dashed #ccc;border-radius:8px;padding:4px 12px;font-size:12px;color:#888;cursor:pointer;transition:all .15s;" ondragover="event.preventDefault();this.style.borderColor='#1D9E75';this.style.color='#1D9E75';" ondragleave="this.style.borderColor='#ccc';this.style.color='#888';" ondrop="handleFileDrop(event)">📂 Перетащи fxpro_prices.txt</div>
+    <button class="copy-btn" onclick="copyAll()">Скопировать</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    Цены FXPRO
+    <span id="fx-badge" class="src-badge src-manual">ручной ввод</span>
+  </div>
+  <div class="fx-grid" id="fxpro-cards"></div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <p class="card-title">Металлы — спреды</p>
+    <table>
+      <thead><tr><th style="width:38%">Связка</th><th>MOEX</th><th>FXPRO</th><th>Спред</th></tr></thead>
+      <tbody id="metals-body"><tr><td colspan="4" class="loading">Загрузка...</td></tr></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <p class="card-title">Валюта — спреды</p>
+    <table>
+      <thead><tr><th style="width:38%">Связка</th><th>MOEX</th><th>FXPRO</th><th>Спред</th></tr></thead>
+      <tbody id="fx-body"><tr><td colspan="4" class="loading">Загрузка...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <p class="card-title">Котировки MOEX</p>
+  <table>
+    <thead><tr>
+      <th style="width:20%">Инструмент</th><th style="width:13%">Цена</th>
+      <th style="width:20%">Инструмент</th><th style="width:13%">Цена</th>
+      <th style="width:20%">Инструмент</th><th style="width:13%">Цена</th>
+    </tr></thead>
+    <tbody id="moex-body"><tr><td colspan="6" class="loading">Загрузка...</td></tr></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <p class="card-title">АФК и рублёвое золото — только MOEX</p>
+  <table>
+    <thead><tr><th style="width:38%">Связка</th><th>Тип</th><th>FXPRO</th><th>Спред</th></tr></thead>
+    <tbody id="afk-body"><tr><td colspan="4" class="loading">Загрузка...</td></tr></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <p class="card-title">Межсерийные (6.26 / 9.26)</p>
+  <table>
+    <thead><tr><th style="width:38%">Спред</th><th>Тип</th><th>FXPRO</th><th>Значение</th></tr></thead>
+    <tbody id="ms-body"><tr><td colspan="4" class="loading">Загрузка...</td></tr></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <p class="card-title">ТВХ и отклонение</p>
+  <table>
+    <thead><tr><th style="width:28%">Связка</th><th>ТВХ</th><th>Текущий</th><th>Откл.</th><th>Статус</th></tr></thead>
+    <tbody id="tvx-body"></tbody>
+  </table>
+</div>
+
+<script>
+const MOEX_INSTRUMENTS = [
+  // Первые квартальные
+  {id:'GDM6', name:'GOLD-6.26', board:'RFUD', dec:2},
+  {id:'SVM6', name:'SILV-6.26', board:'RFUD', dec:2},
+  {id:'PDM6', name:'PLD-6.26', board:'RFUD', dec:2},
+  {id:'PTM6', name:'PLT-6.26', board:'RFUD', dec:2},
+  {id:'GLM6', name:'GL-6.26', board:'RFUD', dec:2},
+  {id:'SiM6', name:'Si-6.26', board:'RFUD', dec:0},
+  {id:'EuM6', name:'Eu-6.26', board:'RFUD', dec:0},
+  {id:'EDM6', name:'ED-6.26', board:'RFUD', dec:5},
+  {id:'UCM6', name:'UCNY-6.26', board:'RFUD', dec:4},
+  {id:'CRM6', name:'CNY-6.26', board:'RFUD', dec:4},
+  {id:'NAM6', name:'NASD-6.26', board:'RFUD', dec:0},
+  {id:'SFM6', name:'SPYF-6.26', board:'RFUD', dec:2},
+  // Вторые квартальные (сентябрь)
+  {id:'GDU6', name:'GOLD-9.26', board:'RFUD', dec:2},
+  {id:'SVU6', name:'SILV-9.26', board:'RFUD', dec:2},
+  {id:'PDU6', name:'PLD-9.26', board:'RFUD', dec:2},
+  {id:'PTU6', name:'PLT-9.26', board:'RFUD', dec:2},
+  {id:'GLU6', name:'GL-9.26', board:'RFUD', dec:2},
+  {id:'SiU6', name:'Si-9.26', board:'RFUD', dec:0},
+  {id:'EuU6', name:'Eu-9.26', board:'RFUD', dec:0},
+  {id:'EDU6', name:'ED-9.26', board:'RFUD', dec:5},
+  {id:'UCU6', name:'UCNY-9.26', board:'RFUD', dec:4},
+  {id:'CRU6', name:'CNY-9.26', board:'RFUD', dec:4},
+  {id:'NAU6', name:'NASD-9.26', board:'RFUD', dec:0},
+  {id:'SFU6', name:'SPYF-9.26', board:'RFUD', dec:2},
+  // Вечники
+  {id:'GLDRUBF', name:'GLDRUBF', board:'RFPI', dec:1},
+  {id:'USDRUBF', name:'USDRUBF', board:'RFPI', dec:4},
+  {id:'EURRUBF', name:'EURRUBF', board:'RFPI', dec:4},
+  {id:'CNYRUBF', name:'CNYRUBF', board:'RFPI', dec:4},
+];
+
+const FXPRO_DEFS = [
+  {key:'XAUUSD', label:'XAU/USD (золото)', def:4505.13, dec:2, type:'metal'},
+  {key:'XAGUSD', label:'XAG/USD (серебро)', def:75.79, dec:3, type:'metal'},
+  {key:'XPDUSD', label:'XPD/USD (палладий)', def:1367.23, dec:2, type:'metal'},
+  {key:'XPTUSD', label:'XPT/USD (платина)', def:1937.60, dec:2, type:'metal'},
+  {key:'EURUSD', label:'EUR/USD', def:1.16572, dec:5, type:'fx'},
+  {key:'USDCNH', label:'USD/CNH', def:6.76528, dec:5, type:'fx'},
+  {key:'EURCNH', label:'EUR/CNH', def:7.8890, dec:5, type:'fx'},
+  {key:'USSPX500', label:'US SP500', def:7586.26, dec:2, type:'index'},
+  {key:'USNDAQ100', label:'US NDAQ100', def:30346.80, dec:2, type:'index'},
+];
+
+const TVX = [
+  // Металлы MOEX/FXPRO
+  {name:'GD/XAUUSD', tvx_lo:99.53, tvx_hi:99.74, moex:'GOLD-6.26', fx:'XAUUSD', mult:100},
+  {name:'SV/XAGUSD', tvx_lo:101.00, tvx_hi:101.35, moex:'SILV-6.26', fx:'XAGUSD', mult:100},
+  {name:'PD/XPDUSD', tvx_lo:101.11, tvx_hi:101.11, moex:'PLD-6.26', fx:'XPDUSD', mult:100},
+  {name:'PT/XPTUSD', tvx_lo:100.00, tvx_hi:100.50, moex:'PLT-6.26', fx:'XPTUSD', mult:100},
+  // Валюта MOEX/FXPRO
+  {name:'ED/EURUSD', tvx_lo:99.81, tvx_hi:99.88, moex:'ED-6.26', fx:'EURUSD', mult:100},
+  {name:'UC/USDCNH', tvx_lo:100.06, tvx_hi:100.28, moex:'UCNY-6.26', fx:'USDCNH', mult:100},
+  {name:'EU/CR/EURCNH', tvx_lo:984.00, tvx_hi:992.00, moex_formula:'eurcnh', fx:'EURCNH', mult:100},
+  {name:'SF/USSPX500', tvx_lo:97.85, tvx_hi:98.20, moex:'SPYF-6.26', fx:'USSPX500', mult:1000},
+  {name:'NA/NDAQ100', tvx_lo:98.00, tvx_hi:98.50, moex:'NASD-6.26', fx:'USNDAQ100', mult:100},
+  // АФК (только MOEX)
+  {name:'АФК USDRUBF/Si', tvx_lo:99.00, tvx_hi:101.00, moex_formula:'usdrubf_si', fx:null, mult:100000},
+  {name:'АФК EURRUBF/EU', tvx_lo:99.00, tvx_hi:101.00, moex_formula:'eurrubf_eu', fx:null, mult:100000},
+  {name:'АФК CNYRUBF/CR', tvx_lo:99.00, tvx_hi:101.00, moex_formula:'cnyrubf_cr', fx:null, mult:100},
+  {name:'АФК GLDRUBF/GD/Si', tvx_lo:98500, tvx_hi:101500, moex_formula:'gldrubf_gd_si', fx:null, mult:100000},
+  {name:'GL/GLDRUBF', tvx_lo:99.50, tvx_hi:100.50, moex_formula:'gl_gldrubf', fx:null, mult:100},
+  // Межсерийные (1й/2й квартал)
+  {name:'Si-6/Si-9', tvx_lo:99.50, tvx_hi:100.00, moex_formula:'si_spread', fx:null, mult:100},
+  {name:'Eu-6/Eu-9', tvx_lo:99.50, tvx_hi:100.00, moex_formula:'eu_spread', fx:null, mult:100},
+  {name:'ED-6/ED-9', tvx_lo:99.50, tvx_hi:100.00, moex_formula:'ed_spread', fx:null, mult:100},
+  {name:'UC-6/UC-9', tvx_lo:99.50, tvx_hi:100.00, moex_formula:'uc_spread', fx:null, mult:100},
+  {name:'GD-6/GD-9', tvx_lo:99.50, tvx_hi:100.00, moex_formula:'gd_spread', fx:null, mult:100},
+  {name:'SV-6/SV-9', tvx_lo:99.50, tvx_hi:100.00, moex_formula:'sv_spread', fx:null, mult:100},
+  {name:'GL-6/GL-9', tvx_lo:99.50, tvx_hi:100.00, moex_formula:'gl_spread', fx:null, mult:100},
+];
+];
+
+let moexPrices = {};
+let fxPrices = {};
+let fxSources = {};
+let lastUpdate = null;
+
+FXPRO_DEFS.forEach(f => { fxPrices[f.key] = f.def; fxSources[f.key] = 'default'; });
+
+function fmt(v, dec) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return Number(v).toFixed(dec);
+}
+
+function calcSpread(r) {
+  // Формульные спреды (только MOEX)
+  if (r.moex_formula) {
+    const Si = moexPrices['Si-6.26'];
+    const Eu = moexPrices['Eu-6.26'];
+    const GD = moexPrices['GOLD-6.26'];
+    const GL = moexPrices['GL-6.26'];
+    const USDRUBF = moexPrices['USDRUBF'];
+    const EURRUBF = moexPrices['EURRUBF'];
+    const CNYRUBF = moexPrices['CNYRUBF'];
+    const CR = moexPrices['CNY-6.26'];
+    const GLDRUBF = moexPrices['GLDRUBF'];
+    const EURCNH = fxPrices['EURCNH'];
+
+    switch(r.moex_formula) {
+      case 'usdrubf_si':
+        if (!USDRUBF || !Si) return null;
+        return (USDRUBF / Si) * r.mult;
+      case 'eurrubf_eu':
+        if (!EURRUBF || !Eu) return null;
+        return (EURRUBF / Eu) * r.mult;
+      case 'cnyrubf_cr':
+        if (!CNYRUBF || !CR) return null;
+        return (CNYRUBF / CR) * r.mult;
+      case 'gldrubf_gd_si':
+        if (!GLDRUBF || !GD || !Si) return null;
+        return (GLDRUBF / ((GD * Si / 1000) / 31.1)) * r.mult;
+      case 'eurcnh':
+        if (!Eu || !CR || !EURCNH) return null;
+        return (Eu / CR / EURCNH) * r.mult;
+      case 'gl_gd_si':
+        if (!GL || !GD || !Si) return null;
+        return (GL / ((GD * Si / 1000) / 31.1)) * r.mult;
+      case 'gl_gldrubf':
+        if (!GL || !GLDRUBF) return null;
+        return (GL / GLDRUBF) * r.mult;
+      // Межсерийные (первый/второй квартал)
+      case 'si_spread':
+        if (!Si || !moexPrices['Si-9.26']) return null;
+        return (Si / moexPrices['Si-9.26']) * r.mult;
+      case 'eu_spread':
+        if (!Eu || !moexPrices['Eu-9.26']) return null;
+        return (Eu / moexPrices['Eu-9.26']) * r.mult;
+      case 'ed_spread':
+        if (!moexPrices['ED-6.26'] || !moexPrices['ED-9.26']) return null;
+        return (moexPrices['ED-6.26'] / moexPrices['ED-9.26']) * r.mult;
+      case 'uc_spread':
+        if (!moexPrices['UCNY-6.26'] || !moexPrices['UCNY-9.26']) return null;
+        return (moexPrices['UCNY-6.26'] / moexPrices['UCNY-9.26']) * r.mult;
+      case 'gd_spread':
+        if (!GD || !moexPrices['GOLD-9.26']) return null;
+        return (GD / moexPrices['GOLD-9.26']) * r.mult;
+      case 'sv_spread':
+        if (!moexPrices['SILV-6.26'] || !moexPrices['SILV-9.26']) return null;
+        return (moexPrices['SILV-6.26'] / moexPrices['SILV-9.26']) * r.mult;
+      case 'gl_spread':
+        if (!GL || !moexPrices['GL-9.26']) return null;
+        return (GL / moexPrices['GL-9.26']) * r.mult;
+      default:
+        return null;
+    }
+  }
+  // Обычный спред MOEX/FXPRO
+  const m = moexPrices[r.moex];
+  const f = fxPrices[r.fx];
+  if (!m || !f) return null;
+  return (m / f) * r.mult;
+}
+
+function spreadClass(val, lo, hi) {
+  if (val === null) return 'neu';
+  if (val < lo) return 'pos';
+  if (val > hi) return 'neg';
+  return 'neu';
+}
+
+async function fetchMoex(secid, board) {
+  const urls = [
+    `https://corsproxy.io/?${encodeURIComponent(`https://iss.moex.com/iss/engines/futures/markets/forts/boards/${board}/securities/${secid}.json?iss.meta=off&iss.only=marketdata&marketdata.columns=SECID,LAST,SETTLEPRICE`)}`,
+    `https://iss.moex.com/iss/engines/futures/markets/forts/boards/${board}/securities/${secid}.json?iss.meta=off&iss.only=marketdata&marketdata.columns=SECID,LAST,SETTLEPRICE`,
+  ];
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {signal: AbortSignal.timeout(5000)});
+      const d = await r.json();
+      const cols = d.marketdata.columns;
+      const data = d.marketdata.data;
+      if (!data || !data[0]) continue;
+      const row = data[0];
+      const v = row[cols.indexOf('LAST')] || row[cols.indexOf('SETTLEPRICE')];
+      if (v) return v;
+    } catch(e) { continue; }
+  }
+  return null;
+}
+
+const CORS_PROXY = 'https://corsproxy.io/?url=';
+
+async function fetchWithCors(url, timeout=7000) {
+  const urls = [url, CORS_PROXY + encodeURIComponent(url)];
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, {signal: AbortSignal.timeout(timeout)});
+      if (r.ok) return await r.json();
+    } catch(e) { continue; }
+  }
+  return null;
+}
+
+async function fetchFxPrices() {
+  let gotAny = false;
+
+  // 1. Frankfurter — EURUSD и USDCNH
+  try {
+    const d = await fetchWithCors('https://api.frankfurter.app/latest?from=USD&to=EUR,CNY');
+    if (d?.rates) {
+      if (d.rates.EUR) { fxPrices['EURUSD'] = +(1/d.rates.EUR).toFixed(6); fxSources['EURUSD'] = 'frankfurter'; gotAny = true; }
+      if (d.rates.CNY) { fxPrices['USDCNH'] = +d.rates.CNY.toFixed(5); fxSources['USDCNH'] = 'frankfurter'; gotAny = true; }
+    }
+  } catch(e) {}
+
+  // 2. metals.live — XAU, XAG, XPD
+  try {
+    const d = await fetchWithCors('https://api.metals.live/v1/spot/XAU,XAG,XPD');
+    if (Array.isArray(d)) {
+      const map = {XAU:'XAUUSD', XAG:'XAGUSD', XPD:'XPDUSD'};
+      d.forEach(item => {
+        const key = map[item.metal?.toUpperCase()];
+        if (key && item.price) { fxPrices[key] = +item.price.toFixed(3); fxSources[key] = 'metals.live'; gotAny = true; }
+      });
+    }
+  } catch(e) {}
+
+  // 3. Yahoo резерв — золото
+  if (!fxPrices['XAUUSD'] || fxSources['XAUUSD'] === 'default') {
+    try {
+      const d = await fetchWithCors('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d');
+      const p = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (p) { fxPrices['XAUUSD'] = +p.toFixed(2); fxSources['XAUUSD'] = 'yahoo'; gotAny = true; }
+    } catch(e) {}
+  }
+
+  // 4. Yahoo резерв — серебро
+  if (!fxPrices['XAGUSD'] || fxSources['XAGUSD'] === 'default') {
+    try {
+      const d = await fetchWithCors('https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1m&range=1d');
+      const p = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (p) { fxPrices['XAGUSD'] = +p.toFixed(3); fxSources['XAGUSD'] = 'yahoo'; gotAny = true; }
+    } catch(e) {}
+  }
+
+  // 5. Yahoo резерв — палладий
+  if (!fxPrices['XPDUSD'] || fxSources['XPDUSD'] === 'default') {
+    try {
+      const d = await fetchWithCors('https://query1.finance.yahoo.com/v8/finance/chart/PA=F?interval=1m&range=1d');
+      const p = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (p) { fxPrices['XPDUSD'] = +p.toFixed(2); fxSources['XPDUSD'] = 'yahoo'; gotAny = true; }
+    } catch(e) {}
+  }
+
+  return gotAny;
+}
+
+function initFxCards() {
+  document.getElementById('fxpro-cards').innerHTML = FXPRO_DEFS.map(f => `
+    <div class="fx-card">
+      <div class="fx-label">${f.label}</div>
+      <div class="fx-val" id="fxval-${f.key}">${fmt(fxPrices[f.key], f.dec)}</div>
+      <div class="fx-src" id="fxsrc-${f.key}">по умолчанию</div>
+      <input class="fx-input" id="fxinput-${f.key}" type="number" step="0.00001"
+        placeholder="вручную"
+        onchange="if(this.value){fxPrices['${f.key}']=parseFloat(this.value);fxSources['${f.key}']='ручной';document.getElementById('fxval-${f.key}').textContent='${f.key === 'EURUSD' ? '' : ''}'+parseFloat(this.value).toFixed(${f.dec});document.getElementById('fxsrc-${f.key}').textContent='вручную';renderAll();}">
+    </div>
+  `).join('');
+}
+
+function updateFxCards() {
+  FXPRO_DEFS.forEach(f => {
+    const valEl = document.getElementById('fxval-'+f.key);
+    const srcEl = document.getElementById('fxsrc-'+f.key);
+    if (valEl) valEl.textContent = fmt(fxPrices[f.key], f.dec);
+    if (srcEl) srcEl.textContent = fxSources[f.key] === 'default' ? 'по умолчанию' :
+                                    fxSources[f.key] === 'frankfurter' ? 'frankfurter.app' :
+                                    fxSources[f.key] === 'metals.live' ? 'metals.live' :
+                                    fxSources[f.key] === 'yahoo' ? 'yahoo finance' : 'вручную';
+  });
+  const anyAuto = Object.values(fxSources).some(s => ['frankfurter','metals.live','yahoo'].includes(s));
+  const badge = document.getElementById('fx-badge');
+  if (badge) {
+    badge.textContent = anyAuto ? 'авто' : 'ручной ввод';
+    badge.className = 'src-badge ' + (anyAuto ? 'src-auto' : 'src-manual');
+  }
+}
+
+function renderMoex() {
+  const pairs = MOEX_INSTRUMENTS.map(i => [i.name, moexPrices[i.name], i.dec]);
+  const rows = [];
+  for (let i = 0; i < pairs.length; i += 3) {
+    const cells = pairs.slice(i, i+3).map(([name, val, dec]) => {
+      const id = 'mi-'+name.replace(/[^a-z0-9]/gi,'');
+      if (val !== null && val !== undefined) {
+        return `<td style="font-weight:500;font-size:12px">${name}</td><td style="font-weight:500">${fmt(val,dec)}</td>`;
+      }
+      return `<td style="font-weight:500;font-size:12px">${name}</td><td><input class="moex-input" id="${id}" placeholder="цена" onchange="moexPrices['${name}']=parseFloat(this.value)||null;renderAll()"></td>`;
+    }).join('');
+    rows.push(`<tr>${cells}</tr>`);
+  }
+  document.getElementById('moex-body').innerHTML = rows.join('');
+}
+
+function renderMetals() {
+  const rows = [
+    {name:'GD/XAUUSD', moex:'GOLD-6.26', fx:'XAUUSD', tvx_lo:99.53, tvx_hi:99.74, mult:100},
+    {name:'SV/XAGUSD', moex:'SILV-6.26', fx:'XAGUSD', tvx_lo:101.00, tvx_hi:101.35, mult:100},
+    {name:'PD/XPDUSD', moex:'PLD-6.26', fx:'XPDUSD', tvx_lo:101.11, tvx_hi:101.11, mult:100},
+    {name:'PT/XPTUSD', moex:'PLT-6.26', fx:'XPTUSD', tvx_lo:100.00, tvx_hi:100.50, mult:100},
+  ];
+  document.getElementById('metals-body').innerHTML = rows.map(r => {
+    const sp = calcSpread(r);
+    const cls = spreadClass(sp, r.tvx_lo, r.tvx_hi);
+    return `<tr><td style="font-weight:500">${r.name}</td><td>${fmt(moexPrices[r.moex],2)}</td><td>${fmt(fxPrices[r.fx],2)}</td><td class="${cls}">${sp?sp.toFixed(3):'—'}</td></tr>`;
+  }).join('');
+}
+
+function renderFx() {
+  const rows = [
+    {name:'ED/EURUSD', moex:'ED-6.26', fx:'EURUSD', tvx_lo:99.81, tvx_hi:99.88, mult:100},
+    {name:'UC/USDCNH', moex:'UCNY-6.26', fx:'USDCNH', tvx_lo:100.06, tvx_hi:100.28, mult:100},
+    {name:'SF/USSPX500', moex:'SPYF-6.26', fx:'USSPX500', tvx_lo:97.85, tvx_hi:98.20, mult:1000},
+    {name:'NA/NDAQ100', moex:'NASD-6.26', fx:'USNDAQ100', tvx_lo:98.00, tvx_hi:98.50, mult:100},
+    {name:'EU/CR/EURCNH', moex_formula:'eurcnh', fx:'EURCNH', tvx_lo:984.00, tvx_hi:992.00, mult:100},
+  ];
+  document.getElementById('fx-body').innerHTML = rows.map(r => {
+    const sp = calcSpread(r);
+    const cls = spreadClass(sp, r.tvx_lo, r.tvx_hi);
+    const moexVal = r.moex ? fmt(moexPrices[r.moex], r.moex.includes('ED') ? 5 : r.moex.includes('CNY') ? 4 : 2) : '—';
+    const fxVal = r.fx ? fmt(fxPrices[r.fx], r.fx.includes('USD') && !r.fx.includes('XA') ? 4 : 2) : '—';
+    return `<tr><td style="font-weight:500">${r.name}</td><td>${moexVal}</td><td>${fxVal}</td><td class="${cls}">${sp?sp.toFixed(3):'—'}</td></tr>`;
+  }).join('');
+}
+
+function renderAfk() {
+  const afkRows = [
+    {name:'АФК USDRUBF/Si', moex_formula:'usdrubf_si', fx:null, tvx_lo:99.00, tvx_hi:101.00, mult:100000},
+    {name:'АФК EURRUBF/EU', moex_formula:'eurrubf_eu', fx:null, tvx_lo:99.00, tvx_hi:101.00, mult:100000},
+    {name:'АФК CNYRUBF/CR', moex_formula:'cnyrubf_cr', fx:null, tvx_lo:99.00, tvx_hi:101.00, mult:100},
+    {name:'АФК GLDRUBF/GD/Si', moex_formula:'gldrubf_gd_si', fx:null, tvx_lo:98500, tvx_hi:101500, mult:100000},
+    {name:'GL/GD/Si квартальный', moex_formula:'gl_gd_si', fx:null, tvx_lo:98500, tvx_hi:101500, mult:100000},
+    {name:'GL/GLDRUBF', moex_formula:'gl_gldrubf', fx:null, tvx_lo:99.50, tvx_hi:100.50, mult:100},
+  ];
+  const body = document.getElementById('afk-body');
+  if (!body) return;
+  body.innerHTML = afkRows.map(r => {
+    const sp = calcSpread(r);
+    const cls = spreadClass(sp, r.tvx_lo, r.tvx_hi);
+    return `<tr><td style="font-weight:500">${r.name}</td><td class="neu">MOEX only</td><td class="neu">—</td><td class="${cls}">${sp?sp.toFixed(r.mult>=10000?0:3):'—'}</td></tr>`;
+  }).join('');
+
+  // Межсерийные
+  const msRows = [
+    {name:'Si-6/Si-9', moex_formula:'si_spread', fx:null, tvx_lo:99.50, tvx_hi:100.00, mult:100},
+    {name:'Eu-6/Eu-9', moex_formula:'eu_spread', fx:null, tvx_lo:99.50, tvx_hi:100.00, mult:100},
+    {name:'ED-6/ED-9', moex_formula:'ed_spread', fx:null, tvx_lo:99.50, tvx_hi:100.00, mult:100},
+    {name:'UC-6/UC-9', moex_formula:'uc_spread', fx:null, tvx_lo:99.50, tvx_hi:100.00, mult:100},
+    {name:'GD-6/GD-9', moex_formula:'gd_spread', fx:null, tvx_lo:99.50, tvx_hi:100.00, mult:100},
+    {name:'SV-6/SV-9', moex_formula:'sv_spread', fx:null, tvx_lo:99.50, tvx_hi:100.00, mult:100},
+    {name:'GL-6/GL-9', moex_formula:'gl_spread', fx:null, tvx_lo:99.50, tvx_hi:100.00, mult:100},
+  ];
+  const msBody = document.getElementById('ms-body');
+  if (!msBody) return;
+  msBody.innerHTML = msRows.map(r => {
+    const sp = calcSpread(r);
+    const cls = spreadClass(sp, r.tvx_lo, r.tvx_hi);
+    return `<tr><td style="font-weight:500">${r.name}</td><td class="neu">MOEX only</td><td class="neu">—</td><td class="${cls}">${sp?sp.toFixed(3):'—'}</td></tr>`;
+  }).join('');
+}
+
+function renderTvx() {
+  document.getElementById('tvx-body').innerHTML = TVX.map(r => {
+    const sp = calcSpread(r);
+    const tvxMid = (r.tvx_lo + r.tvx_hi) / 2;
+    const diff = sp ? sp - tvxMid : null;
+    const cls = diff===null?'neu':diff>0?'neg':'pos';
+    let status = '—';
+    if (sp!==null) {
+      if (sp < r.tvx_lo) status = 'ниже ТВХ — добавить?';
+      else if (sp > r.tvx_hi) status = 'выше ТВХ — в позиции';
+      else status = 'в диапазоне ТВХ';
+    }
+    return `<tr>
+      <td style="font-weight:500">${r.name}</td>
+      <td style="font-size:11px;color:#888">${r.tvx_lo===r.tvx_hi?r.tvx_lo.toFixed(2):r.tvx_lo.toFixed(2)+'–'+r.tvx_hi.toFixed(2)}</td>
+      <td style="font-weight:500">${sp?sp.toFixed(3):'—'}</td>
+      <td class="${cls}">${diff!==null?(diff>0?'+':'')+diff.toFixed(3):'—'}</td>
+      <td style="font-size:11px;color:#888">${status}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderAll() {
+  renderMoex();
+  renderMetals();
+  renderFx();
+  renderAfk();
+  renderTvx();
+  updateFxCards();
+}
+
+async function loadAll() {
+  document.getElementById('status-moex').textContent = 'MOEX: обновление...';
+  document.getElementById('status-fx').textContent = 'FXPRO: обновление...';
+
+  const [moexDone, fxDone] = await Promise.all([
+    Promise.all(MOEX_INSTRUMENTS.map(async i => {
+      const p = await fetchMoex(i.id, i.board);
+      moexPrices[i.name] = p;
+    })),
+    fetchFxPrices()
+  ]);
+
+  lastUpdate = new Date();
+  document.getElementById('time').textContent = 'Обновлено: ' + lastUpdate.toLocaleTimeString('ru-RU') + ' МСК';
+
+  const hasM = Object.values(moexPrices).some(v => v!==null);
+  document.getElementById('status-moex').textContent = hasM ? 'MOEX: данные получены' : 'MOEX: закрыта — введи вручную';
+  document.getElementById('status-moex').className = 'status ' + (hasM ? 'ok' : 'warn');
+
+  const hasF = Object.values(fxSources).some(s => ['frankfurter','metals.live','yahoo'].includes(s));
+  document.getElementById('status-fx').textContent = hasF ? 'FXPRO: авто (может отличаться от реальной)' : 'FXPRO: введи вручную';
+  document.getElementById('status-fx').className = 'status ' + (hasF ? 'ok' : 'warn');
+
+  renderAll();
+}
+
+function parseFxproPrices(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  if (!lines[0] || !lines[0].includes('FXPRO_PRICES')) return null;
+  let count = 0;
+  const timeStr = lines[1] || '';
+  for (const line of lines) {
+    const parts = line.split('=');
+    if (parts.length === 2) {
+      const key = parts[0].trim();
+      const val = parseFloat(parts[1].trim().replace(',', '.'));
+      if (fxPrices.hasOwnProperty(key) && !isNaN(val)) {
+        fxPrices[key] = val;
+        fxSources[key] = 'cTrader';
+        const input = document.getElementById('fxinput-' + key);
+        if (input) input.value = val;
+        count++;
+      }
+    }
+  }
+  return {count, timeStr};
+}
+
+function handleFileDrop(event) {
+  event.preventDefault();
+  const drop = document.getElementById('drop-zone');
+  drop.style.borderColor = '#ccc';
+  drop.style.color = '#888';
+  const file = event.dataTransfer.files[0];
+  if (!file || !file.name.includes('fxpro_prices')) {
+    drop.textContent = '❌ Нужен файл fxpro_prices.txt';
+    setTimeout(() => drop.textContent = '📂 Перетащи fxpro_prices.txt', 2000);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const result = parseFxproPrices(e.target.result);
+    if (result && result.count > 0) {
+      document.getElementById('status-fx').textContent = `FXPRO: данные из cTrader (${result.timeStr})`;
+      document.getElementById('status-fx').className = 'status ok';
+      renderAll();
+      drop.textContent = `✓ Загружено ${result.count} цен (${result.timeStr})`;
+      setTimeout(() => drop.textContent = '📂 Перетащи fxpro_prices.txt', 3000);
+    } else {
+      drop.textContent = '❌ Неверный формат файла';
+      setTimeout(() => drop.textContent = '📂 Перетащи fxpro_prices.txt', 2000);
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function pasteFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    const result = parseFxproPrices(text);
+    if (!result) {
+      alert('Буфер не содержит данных от PriceCopier.\n\nЗапусти cBot PriceCopier в cTrader и подожди 30 секунд.');
+      return;
+    }
+    if (result.count > 0) {
+      document.getElementById('status-fx').textContent = `FXPRO: данные из cTrader (${result.timeStr})`;
+      document.getElementById('status-fx').className = 'status ok';
+      renderAll();
+      const btn = document.querySelector('[onclick="pasteFromClipboard()"]');
+      btn.textContent = `✓ Вставлено ${result.count} цен`;
+      setTimeout(() => btn.innerHTML = '📋 Вставить FXPRO', 2000);
+    }
+  } catch(e) {
+    alert('Нет доступа к буферу обмена. Используй drag & drop файла fxpro_prices.txt');
+  }
+}
+
+function copyAll() {
+  const lines = ['=== Котировки ' + (lastUpdate?lastUpdate.toLocaleTimeString('ru-RU'):'') + ' МСК ==='];
+  lines.push('\nMOEX:');
+  MOEX_INSTRUMENTS.forEach(i => { if (moexPrices[i.name]) lines.push(`${i.name}: ${fmt(moexPrices[i.name],i.dec)}`); });
+  lines.push('\nFXPRO:');
+  FXPRO_DEFS.forEach(f => lines.push(`${f.key}: ${fmt(fxPrices[f.key],f.dec)} (${fxSources[f.key]})`));
+  lines.push('\nСпреды:');
+  TVX.forEach(r => { const sp=calcSpread(r.moex,r.fx,r.mult); if(sp) lines.push(`${r.name}: ${sp.toFixed(3)} (ТВХ ${r.tvx_lo}–${r.tvx_hi})`); });
+  navigator.clipboard.writeText(lines.join('\n'));
+  const btn = document.querySelector('.copy-btn');
+  btn.textContent = 'Скопировано!';
+  setTimeout(() => btn.textContent = 'Скопировать', 2000);
+}
+
+initFxCards();
+loadAll();
+setInterval(loadAll, 300000);
+</script>
+</body>
+</html>
